@@ -1,0 +1,117 @@
+---
+title: "Time-Series Data"
+author: "Adam Scheerer"
+date: "November 26, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(astsa, quietly=TRUE, warn.conflicts=FALSE)
+library(ggplot2)
+library(knitr)
+library(printr)
+library(plyr)
+library(dplyr)
+library(lubridate)
+library(gridExtra)
+library(reshape2)
+library(TTR)
+library(fpp2)
+library(xts)
+library(dygraphs)
+library(RColorBrewer)
+```
+
+# Warming up with Financial Data
+
+```{r,echo=T}
+
+head(EuStockMarkets)
+Dax <- EuStockMarkets[,1]
+Dax <- as.data.frame(Dax)
+plot(EuStockMarkets[,1],ylab='DAX',col=4,main='DAX Index, 1991-1998',xlab='Year')
+  abline(v=1997,col='red')#plot of the DAX from 1991-1998
+
+
+
+Decomposed.Dax <- decompose(EuStockMarkets[,1],'multiplicative')
+plot(Decomposed.Dax)   #Here we have a plot of the observed, trend, seaonal, and random                            decompositions
+
+plot(Decomposed.Dax$random) #Here is the plot of the random elements
+
+DaxAdjusted <- Dax$x/(Decomposed.Dax$random)
+
+plot.ts(DaxAdjusted,col=4,ylab='DAX minus Random Decomposition',main='DAX Index,1991-1998 without Random events',xlab='Year')
+abline(v=1997,col='red')  #Here we see the time series plot without the randomness
+```
+
+
+
+#Temperature Data
+
+### SES Model
+```{r,echo=TRUE}
+
+
+
+post.1990.maxtemp <- window(maxtemp,start=1990)
+plot(post.1990.maxtemp,ylab='Max Temperature in Celsius',xlab='Year',main='Max Temperature in Melbourne, 1990-2016')
+
+
+ses(post.1990.maxtemp,5,x=post.1990.maxtemp)  #Here we have the predicted values given to us from the SES function
+SES.model <- ses(post.1990.maxtemp,5,x=post.1990.maxtemp)
+plot(ses(post.1990.maxtemp,5),ylab='Max Temperature in Celsius',xlab='Year',main='Max Temperature in Melbourne, 1990-2016')
+abline(h=42.272727272727,col='blue')  #Here is our graph with the blue line of predicted value of 42.2727 imposed on the graph.
+SES.model.AICC <- SES.model$model$aicc
+SES.model.AICC #This shows our AICc to be 141.53
+```
+###Holt Model
+```{r,echo=TRUE}
+Holt.model<- holt(post.1990.maxtemp,h=5,damped=T,inital='optimal')
+Holt.plot <- plot(Holt.model,ylab='Max Temperature in Celsius',xlab='Year',main='Max Temperature in Melbourne, 1990-2016')
+
+abline(a=40,b=2)
+Holt.model
+Holt.model.AICC <- Holt.model$model$aicc
+Holt.model.AICC #Here the AICc is 145.59 which is larger than the SES model.  
+
+maxtemp.df <- as.data.frame(post.1990.maxtemp)
+maxtemp.df<- maxtemp.df[,1]
+time.series.holt <- ts(maxtemp.df,start=1990,end=2016,frequency=2)
+decomposed.holt <- decompose(time.series.holt,'additive')
+plot(decomposed.holt)  #Here is our plot of the decomposition of the max temps similar to the one I did with the financial data. 
+                       
+```
+
+##### As I mentioned in the code, since the AICc value for our Holt model is greater than that of our SES model, we would expect the Holt model to be more accurate.
+
+
+#The Wands Choose the Wizard
+```{r,echo=TRUE}
+Ollivander <- read.csv("~/Downloads/MSDSUNIT12Assignment/Unit11TimeSeries_Ollivander.csv", header=FALSE)
+Gregorovitch <- read.csv("~/Downloads/MSDSUNIT12Assignment/Unit11TimeSeries_Gregorovitch.csv",header=F)
+colnames(Ollivander)<-c('DateOlli','Ollivander')
+colnames(Gregorovitch)<-c('DateGreg','Gregorovitch')
+
+Ollivander$DateOlli <- strptime(as.character(Ollivander$DateOlli),'%d/%m/%Y')  #This allows me to format the Date variable to something we can turn into an XTS object
+XTS.Ollivander <- xts(Ollivander,order.by = as.Date(Ollivander$DateOlli))
+
+Gregorovitch$DateGreg <-strptime(as.character(Gregorovitch$DateGreg),'%d/%m/%Y')
+XTS.Gregorovitch <- xts(Gregorovitch,order.by = as.Date(Gregorovitch$DateGreg))
+
+Merged.Series <- merge(XTS.Gregorovitch,XTS.Ollivander,all=T)
+
+dygraph(Merged.Series,main = 'Wands Sold by Year, Ollivander vs Gregorovitch',ylab='Wands Sold by Year',xlab='Year') %>%
+  dyOptions(colors=RColorBrewer::brewer.pal(4,'Set1'))%>%
+  dyRangeSelector()%>%
+  dySeries(label='Wands Sold')%>%
+  dyShading(from='1995-1-1',to='1999-1-1',color ="#CCEBD6")  #This gives us our graph.
+
+
+
+```
+
+
+
+
